@@ -28,10 +28,10 @@ jobs:
        # run: npm test
 
       # Step 4: Authenticate with AWS ECR
-      #- name: Log in to Amazon ECR
-       # run: |
-        #  aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
-         # | docker login --username AWS --password-stdin ${{ secrets.ECR_REPOSITORY }}
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+          | docker login --username AWS --password-stdin ${{ secrets.ECR_REPOSITORY }}
 
       # Step 5: Build and push Docker image
       - name: Build Docker image
