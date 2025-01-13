@@ -45,7 +45,8 @@ jobs:
       - name: Build Docker image
         run: |
           docker build -t angular-app .
-          docker tag angular-app:latest ${{ secrets.ECR_REPOSITORY }}:latest 
+          docker tag angular-app:latest ${{ secrets.ECR_REPOSITORY }}:latest
+          docker push ${{ secrets.ECR_REPOSITORY }}:latest
 
       # Step 6: Deploy to EC2
       - name: Deploy to EC2
