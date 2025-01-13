@@ -1,0 +1,52 @@
+name: Deploy Angular App
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Node.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      # Step 3: Install dependencies and run tests
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
+
+      # Step 4: Authenticate with AWS ECR
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+          | docker login --username AWS --password-stdin ${{ secrets.ECR_REPOSITORY }}
+
+      # Step 5: Build and push Docker image
+      - name: Build Docker image
+        run: |
+          docker build -t angular-app .
+          docker tag angular-app:latest ${{ secrets.ECR_REPOSITORY }}:latest
+          docker push ${{ secrets.ECR_REPOSITORY }}:latest
+
+      # Step 6: Deploy to EC2
+      - name: Deploy to EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ${{ secrets.EC2_SSH_KEY }} ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
+          docker stop angular-container || true
+          docker rm angular-container || true
+          docker pull ${{ secrets.ECR_REPOSITORY }}:latest
+          docker run -d -p 80:80 --name angular-container ${{ secrets.ECR_REPOSITORY }}:latest
+          EOF
+
