@@ -1,22 +1,111 @@
-# Node.js with webpack
-# Build a Node.js project using the webpack CLI.
-# Add steps that analyze code, save build artifacts, deploy, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/languages/javascript
-
+# Trigger pipeline on changes to the main branch
 trigger:
-- master
+  branches:
+    include:
+      - main
 
-pool:
-  vmImage: ubuntu-latest
+# Define stages for the pipeline
+stages:
+  - stage: Build
+    displayName: Build and Test Stage
+    jobs:
+      - job: Build
+        displayName: Build Angular Application
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          # Step 1: Install Node.js
+          - task: UseNode@2
+            inputs:
+              version: '16.x' # Adjust Node.js version as needed
+          
+          # Step 2: Install Dependencies
+          - script: |
+              npm install
+            displayName: Install Dependencies
 
-steps:
-- task: NodeTool@0
-  inputs:
-    versionSpec: '20.x'
-  displayName: 'Install Node.js'
+          # Step 3: Build the Application
+          - script: |
+              npm run build --prod
+            displayName: Build Application
 
-- script: |
-    npm install -g webpack webpack-cli --save-dev
-    npm install
-    npx webpack
-  displayName: 'npm install, run webpack'
+          # Step 4: Run Unit Tests
+          - script: |
+              npm run test -- --watch=false --browsers=ChromeHeadless
+            displayName: Run Unit Tests
+
+          # Step 5: Publish Build Artifacts
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathtoPublish: 'dist/' # Path to the build output folder
+              artifactName: 'angular-dist'
+              publishLocation: 'Container'
+
+  - stage: DeployDev
+    displayName: Deploy to Development
+    dependsOn: Build
+    jobs:
+      - deployment: DeployToDev
+        displayName: Deploy to Development Environment
+        environment: Development
+        pool:
+          vmImage: 'ubuntu-latest'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Step 1: Deploy to Azure App Service
+                - task: AzureWebApp@1
+                  inputs:
+                    azureSubscription: '<Azure-Service-Connection-Name>' # Replace with your Azure service connection name
+                    appType: 'webApp'
+                    appName: '<Dev-App-Service-Name>' # Replace with your Azure App Service name
+                    package: '$(Pipeline.Workspace)/angular-dist'
+
+  - stage: DeployStaging
+    displayName: Deploy to Staging
+    dependsOn: DeployDev
+    jobs:
+      - deployment: DeployToStaging
+        displayName: Deploy to Staging Environment
+        environment: Staging
+        pool:
+          vmImage: 'ubuntu-latest'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Step 1: Deploy to Azure App Service
+                - task: AzureWebApp@1
+                  inputs:
+                    azureSubscription: '<Azure-Service-Connection-Name>'
+                    appType: 'webApp'
+                    appName: '<Staging-App-Service-Name>'
+                    package: '$(Pipeline.Workspace)/angular-dist'
+
+  - stage: DeployProduction
+    displayName: Deploy to Production
+    dependsOn: DeployStaging
+    jobs:
+      - deployment: DeployToProd
+        displayName: Deploy to Production Environment
+        environment: Production
+        pool:
+          vmImage: 'ubuntu-latest'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Step 1: Deploy to Azure App Service
+                - task: AzureWebApp@1
+                  inputs:
+                    azureSubscription: '<Azure-Service-Connection-Name>'
+                    appType: 'webApp'
+                    appName: '<Prod-App-Service-Name>'
+                    package: '$(Pipeline.Workspace)/angular-dist'
+
+                # Step 2: Post-Deployment Checks
+                - script: |
+                    echo "Running post-deployment health checks..."
+                    curl -f https://<Prod-App-Service-URL>
+                  displayName: Health Check
